@@ -1,0 +1,17 @@
+{
+  "name": "kuroword-stremio-addon",
+  "version": "1.0.0",
+  "description": "KuroWord Stremio Addon - Todo el contenido sin censura",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node api/index.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
