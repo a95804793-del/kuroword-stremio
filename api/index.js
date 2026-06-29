@@ -80,9 +80,23 @@ async function tmdbFetch(path) {
   }
 }
 
-function tmdbToMeta(item, type) {
+async function getImdbId(tmdbId, type) {
+  const mediaType = type === "series" ? "tv" : "movie";
+  try {
+    const r = await fetch(
+      `${TMDB_BASE}/${mediaType}/${tmdbId}/external_ids?api_key=${process.env.TMDB_API_KEY}`
+    );
+    const d = await r.json();
+    return d.imdb_id || null;
+  } catch {
+    return null;
+  }
+}
+
+function tmdbToMeta(item, type, imdbId) {
+  const id = imdbId || `tmdb:${item.id}`;
   return {
-    id: `tt${item.id}`,
+    id,
     type,
     name: item.title || item.name,
     poster: item.poster_path
@@ -159,6 +173,17 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
     return { metas: metas.filter(Boolean) };
   }
 
+  // Helper para convertir lista de resultados TMDB a metas con IMDB IDs
+  async function resultsToMetas(results, type) {
+    const metas = await Promise.all(
+      results.slice(0, 20).map(async (item) => {
+        const imdbId = await getImdbId(item.id, type);
+        return tmdbToMeta(item, type, imdbId);
+      })
+    );
+    return metas.filter((m) => m.id);
+  }
+
   // ── Anime series ──
   if (id === "kw_anime_series") {
     const endpoint = search
@@ -166,7 +191,7 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
       : `/discover/tv?with_keywords=210024&sort_by=popularity.desc&page=${page}`;
     const data = await tmdbFetch(endpoint);
     if (!data?.results) return { metas: [] };
-    return { metas: data.results.map((i) => tmdbToMeta(i, "series")) };
+    return { metas: await resultsToMetas(data.results, "series") };
   }
 
   // ── Anime movies ──
@@ -176,14 +201,12 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
       : `/discover/movie?with_keywords=210024&sort_by=popularity.desc&page=${page}`;
     const data = await tmdbFetch(endpoint);
     if (!data?.results) return { metas: [] };
-    return { metas: data.results.map((i) => tmdbToMeta(i, "movie")) };
+    return { metas: await resultsToMetas(data.results, "movie") };
   }
 
-  // ── Adultos – usa Torrentio Adult catalog via TMDB genre adult ──
+  // ── Adultos ──
   if (id === "kw_adult" || id === "kw_adult_series") {
     const contentType = id === "kw_adult" ? "movie" : "series";
-    // Para adultos usamos una lista curada de IDs de IMDB conocidos
-    // más búsqueda libre via Torrentio directamente por nombre
     const adultKeywords = search || "adult";
     const endpoint =
       contentType === "movie"
@@ -191,7 +214,7 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
         : `/search/tv?query=${encodeURIComponent(adultKeywords)}&include_adult=true&page=${page}`;
     const data = await tmdbFetch(endpoint);
     if (data?.results?.length) {
-      return { metas: data.results.map((i) => tmdbToMeta(i, contentType)) };
+      return { metas: await resultsToMetas(data.results, contentType) };
     }
     return { metas: [] };
   }
@@ -203,7 +226,7 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
       : `/movie/popular?page=${page}`;
     const data = await tmdbFetch(endpoint);
     if (!data?.results) return { metas: [] };
-    return { metas: data.results.map((i) => tmdbToMeta(i, "movie")) };
+    return { metas: await resultsToMetas(data.results, "movie") };
   }
 
   // ── Series populares ──
@@ -213,7 +236,7 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
       : `/tv/popular?page=${page}`;
     const data = await tmdbFetch(endpoint);
     if (!data?.results) return { metas: [] };
-    return { metas: data.results.map((i) => tmdbToMeta(i, "series")) };
+    return { metas: await resultsToMetas(data.results, "series") };
   }
 
   return { metas: [] };
